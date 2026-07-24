@@ -11,9 +11,6 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-interface Env {
-	GTG_KV: KVNamespace;
-}
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
