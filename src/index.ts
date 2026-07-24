@@ -18,13 +18,18 @@ interface Env {
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
 		const t0 = performance.now();
+		// Busca o host no KV
 		const gtgHost = (await env.GTG_KV.get(request.headers.get('host') as string)) + '.fps.goog'; // Ex: gtm-wrknvs.fps.goog
 		const kvTime = Math.round(performance.now() - t0);
 
+		// 1. MODIFICAÇÃO DO REQUEST
 		const gtgUrl = new URL(request.url);
 		gtgUrl.hostname = gtgHost;
+
+		// Cria o novo request mantendo corpo, método e headers originais
 		const newRequest = new Request(gtgUrl, request);
 
+		// Extrai as variáveis do request.cf
 		const cfCountry = request.cf?.country;
 		const cfRegion = request.cf?.regionCode;
 		const cfLatitude = request.cf?.latitude;
@@ -39,7 +44,10 @@ export default {
 
 		const response = await fetch(newRequest);
 
+		// 2. MODIFICAÇÃO DO RESPONSE
 		const newResponse = new Response(response.body, response);
+
+		// Injeta o Server-Timing na resposta para debugar o tempo do KV
 		newResponse.headers.append('Server-Timing', `kvTime;dur=${kvTime}`);
 
 		return newResponse;
