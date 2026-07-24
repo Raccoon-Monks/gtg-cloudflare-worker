@@ -13,6 +13,13 @@
 	"upload_source_maps": true,
 	"compatibility_flags": [
 		"nodejs_compat"
+	],
+	"kv_namespaces": [
+		{
+			"binding": "GTG_KV",
+			"id": "02853256eacc435f87f77331df9e7faf",
+			"remote": true
+		}
 	]
 	/**
 	 * Smart Placement
