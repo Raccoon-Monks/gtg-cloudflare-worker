@@ -11,7 +11,6 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
 		const t0 = performance.now();
@@ -24,7 +23,8 @@ export default {
 		gtgUrl.hostname = gtgHost;
 
 		// Cria o novo request mantendo corpo, método e headers originais
-		const newRequest = new Request(gtgUrl, request);
+		// const newRequest = new Request(gtgUrl, request);
+		const newRequest = new Request('https://louren.co.in/scripts/faker.js', request);
 
 		// Extrai as variáveis do request.cf
 		const cfCountry = request.cf?.country;
@@ -39,14 +39,15 @@ export default {
 			newRequest.headers.set('X-Forwarded-Geolocation', `latlong=${cfLatitude},${cfLongitude};city=${cfCity}`);
 		}
 
+		const t1 = performance.now();
 		const response = await fetch(newRequest);
-
+		const fetchTime = Math.round(performance.now() - t1);
+		
 		// 2. MODIFICAÇÃO DO RESPONSE
 		const newResponse = new Response(response.body, response);
-
+		
 		// Injeta o Server-Timing na resposta para debugar o tempo do KV
-		newResponse.headers.append('Server-Timing', `kvTime;dur=${kvTime}`);
-
+		newResponse.headers.append('Server-Timing', `kvTime;dur=${kvTime}, fetchTime;dur=${fetchTime}`);
 		return newResponse;
 	},
 } satisfies ExportedHandler<Env>;
