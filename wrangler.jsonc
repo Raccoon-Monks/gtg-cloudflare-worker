@@ -18,7 +18,7 @@
 		}
 	},
 	"workers_dev": false,
-	"route": "lcrespilho.com/test1/*",
+	"route": "lcrespilho.com/gtg/*",
 	"upload_source_maps": true,
 	"compatibility_flags": [
 		"nodejs_compat"

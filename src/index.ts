@@ -13,41 +13,65 @@
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
-		const t0 = performance.now();
-		// Busca o host no KV
-		const gtgHost = (await env.GTG_KV.get(request.headers.get('host') as string)) + '.fps.goog'; // Ex: gtm-wrknvs.fps.goog
-		const kvTime = Math.round(performance.now() - t0);
+		const reqUrl = new URL(request.url)
+		const pathname = reqUrl.pathname
+		const query = reqUrl.search
 
-		// 1. MODIFICAÇÃO DO REQUEST
-		const gtgUrl = new URL(request.url);
-		gtgUrl.hostname = gtgHost;
+		if (reqUrl.pathname.startsWith('/gtg/')) {
+			const [gtgHostname, kvQueryTime] = await getGtgHostname(request, env) // Ex: ['gtm-wrknvs.fps.goog', 25]
+			// muda a url de requisição
+			reqUrl.hostname = gtgHostname
+			// Adiciona geolocalização na requisição para o GTG
+			const newRequest = new Request(reqUrl, request) // Cópia para poder modificar headers
+			setGeoHeders(newRequest)
 
-		// Cria o novo request mantendo corpo, método e headers originais
-		// const newRequest = new Request(gtgUrl, request);
-		const newRequest = new Request('https://louren.co.in/scripts/faker.js', request);
+			const shouldForceCache =
+				pathname.match(/^\/gtg\/(\?validate_geo=)?healthy$/) || // rotas de saúde
+				pathname.match(/^\/gtg\/_\/service_worker\//) || // Service Worker
+				!query // scripts
+			const cf = shouldForceCache ? { cacheTtl: 900, cacheEverything: true } : {}
+			const t0 = performance.now()
+			const response = await fetch(newRequest, { cf })
+			const gtgFetchTime = Math.round(performance.now() - t0)
 
-		// Extrai as variáveis do request.cf
-		const cfCountry = request.cf?.country;
-		const cfRegion = request.cf?.regionCode;
-		const cfLatitude = request.cf?.latitude;
-		const cfLongitude = request.cf?.longitude;
-		const cfCity = request.cf?.city?.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-		if (cfCountry && cfRegion) {
-			newRequest.headers.set('X-Forwarded-CountryRegion', `${cfCountry}-${cfRegion}`);
+			// Cópia do response para poder mutar os headers
+			const newResponse = new Response(response.body, response)
+
+			// Injeta o Server-Timing na resposta para debugar o tempo do KV e do GTG
+			newResponse.headers.append('Server-Timing', `kvQueryTime;dur=${kvQueryTime}, gtgFetchTime;dur=${gtgFetchTime}`)
+			return newResponse
+		} else {
+			return new Response('Erro: o path deve começar com /gtg/', {
+				status: 400,
+				statusText: 'Bad Request',
+			})
 		}
-		if (cfLatitude && cfLongitude && cfCity) {
-			newRequest.headers.set('X-Forwarded-Geolocation', `latlong=${cfLatitude},${cfLongitude};city=${cfCity}`);
-		}
-
-		const t1 = performance.now();
-		const response = await fetch(newRequest);
-		const fetchTime = Math.round(performance.now() - t1);
-		
-		// 2. MODIFICAÇÃO DO RESPONSE
-		const newResponse = new Response(response.body, response);
-		
-		// Injeta o Server-Timing na resposta para debugar o tempo do KV
-		newResponse.headers.append('Server-Timing', `kvTime;dur=${kvTime}, fetchTime;dur=${fetchTime}`);
-		return newResponse;
 	},
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env>
+
+/**
+ * Adiciona headers de geolocalização para GTG e sGTM.
+ * @param {Request<unknown, IncomingRequestCfProperties<unknown>>} newRequest
+ */
+function setGeoHeders(newRequest: Request<unknown, IncomingRequestCfProperties<unknown>>) {
+	const cfCountry = newRequest.cf?.country
+	const cfRegion = newRequest.cf?.regionCode
+	const cfLatitude = newRequest.cf?.latitude
+	const cfLongitude = newRequest.cf?.longitude
+	const cfCity = newRequest.cf?.city?.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+	if (cfCountry && cfRegion) {
+		newRequest.headers.set('X-Forwarded-CountryRegion', `${cfCountry}-${cfRegion}`)
+		newRequest.headers.set('X-Gclb-Country', cfCountry)
+		newRequest.headers.set('X-Gclb-Region', cfRegion)
+	}
+	if (cfLatitude && cfLongitude && cfCity) {
+		newRequest.headers.set('X-Forwarded-Geolocation', `latlong=${cfLatitude},${cfLongitude};city=${cfCity}`)
+	}
+}
+
+async function getGtgHostname(request: Request, env: Env): Promise<[string, number]> {
+	const t0 = performance.now()
+	const gtgHost: string = (await env.GTG_KV.get(request.headers.get('host') as string)) + '.fps.goog' // Ex: gtm-wrknvs.fps.goog
+	const kvQueryTime: number = Math.round(performance.now() - t0)
+	return [gtgHost, kvQueryTime]
+}
