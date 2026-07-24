@@ -34,7 +34,9 @@ export default {
 
 			// Para realizar cache dos scripts (GTM e GTAG) é necessário forçar (com `cf`),
 			// porque o GTG responde os scripts com "Cache-Control: private,max-age=900".
-			const cf = isContainerRequest ? { cacheTtl: 900, cacheEverything: true } : { cacheTtl: 0 }
+			const cf: CfProperties = isContainerRequest
+				? { cacheControl: 'public,max-age=900' } // aparentemente a Cloudflare precisa que max-age>14400
+				: { cacheControl: 'no-cache, no-store, must-revalidate' }
 			const t0 = performance.now()
 			const response = await fetch(newRequest, { cf })
 			const gtgFetchTime = Math.round(performance.now() - t0)
