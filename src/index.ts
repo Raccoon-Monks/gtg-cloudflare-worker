@@ -16,20 +16,25 @@ export default {
 		const reqUrl = new URL(request.url)
 		const pathname = reqUrl.pathname
 		const query = reqUrl.search
+		const reqUri = pathname + query + reqUrl.hash
 
+		// https://excalidraw.com/#json=UZP_BHJ9OPhhVBDMQXxne,nIvP4zsJG7QvDIH94P1xMg
 		if (reqUrl.pathname.startsWith('/gtg/')) {
 			const [gtgHostname, kvQueryTime] = await getGtgHostname(request, env) // Ex: ['gtm-wrknvs.fps.goog', 25]
+
 			// muda a url de requisição
 			reqUrl.hostname = gtgHostname
+
 			// Adiciona geolocalização na requisição para o GTG
 			const newRequest = new Request(reqUrl, request) // Cópia para poder modificar headers
 			setGeoHeders(newRequest)
 
-			const shouldForceCache =
-				pathname.match(/^\/gtg\/(\?validate_geo=)?healthy$/) || // rotas de saúde
-				pathname.match(/^\/gtg\/_\/service_worker\//) || // Service Worker
-				!query // scripts
-			const cf = shouldForceCache ? { cacheTtl: 900, cacheEverything: true } : {}
+			const isHealthyRequest = reqUri.match(/^\/gtg\/(\?validate_geo=)?healthy$/) // saúde/healthy do GTG
+			const isContainerRequest = !isHealthyRequest && !query // scripts GTM e GTAG
+
+			// Para realizar cache dos scripts (GTM e GTAG) é necessário forçar (com `cf`),
+			// porque o GTG responde os scripts com "Cache-Control: private,max-age=900".
+			const cf = isContainerRequest ? { cacheTtl: 900, cacheEverything: true } : {}
 			const t0 = performance.now()
 			const response = await fetch(newRequest, { cf })
 			const gtgFetchTime = Math.round(performance.now() - t0)
@@ -71,6 +76,17 @@ function setGeoHeders(newRequest: Request<unknown, IncomingRequestCfProperties<u
 
 async function getGtgHostname(request: Request, env: Env): Promise<[string, number]> {
 	const t0 = performance.now()
+	// o namespace GTG_KV foi criado via comando:
+	// - npx wrangler kv namespace create GTG_KV
+	// e depois foi feito o bind em wrangler.jsonc na propriedade kv_namespaces:
+	//    "kv_namespaces": [
+	//        {
+	//            "binding": "GTG_KV",
+	//            "id": "02853256eacc435f87f77331df9e7faf",
+	//            "remote": true
+	//        }
+	//    ]
+	// https://developers.cloudflare.com/kv/get-started/#2-create-a-kv-namespace
 	const gtgHost: string = (await env.GTG_KV.get(request.headers.get('host') as string)) + '.fps.goog' // Ex: gtm-wrknvs.fps.goog
 	const kvQueryTime: number = Math.round(performance.now() - t0)
 	return [gtgHost, kvQueryTime]
