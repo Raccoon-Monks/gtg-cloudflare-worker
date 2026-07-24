@@ -18,22 +18,30 @@ interface Env {
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
 		const t0 = performance.now();
-		await env.GTG_KV.get('minha_chave');
-		const tGet = Math.round(performance.now() - t0);
-		const hostname = new URL(request.url).hostname;
-		console.log('> hostname:', hostname);
-		const headers = new Headers();
-		headers.append('Server-Timing', `kvget;dur=${tGet}`);
-		headers.append(
-			'X-Forwarded-CountryRegion',
-			request.cf?.country && request.cf?.regionCode ? `${request.cf?.country}-${request.cf?.regionCode}` : 'unknown',
-		);
-		headers.append('X-Forwarded-Country', request.cf?.country || 'unknown');
-		headers.append('X-Forwarded-Region', request.cf?.regionCode || 'unknown');
-		const city = (request.cf?.city || 'unknown').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-		headers.append('X-Forwarded-Geolocation', `latlong=${request.cf?.latitude},${request.cf?.longitude};city=${city}`);
-		headers.append('X-Gclb-Country', request.cf?.country || 'unknown');
-		headers.append('X-Gclb-Region', `${request.cf?.country}${request.cf?.regionCode}` || 'unknown');
-		return new Response('Hello Worker!', { headers });
+		const gtgHost = (await env.GTG_KV.get(request.headers.get('host') as string)) + '.fps.goog'; // Ex: gtm-wrknvs.fps.goog
+		const kvTime = Math.round(performance.now() - t0);
+
+		const gtgUrl = new URL(request.url);
+		gtgUrl.hostname = gtgHost;
+		const newRequest = new Request(gtgUrl, request);
+
+		const cfCountry = request.cf?.country;
+		const cfRegion = request.cf?.regionCode;
+		const cfLatitude = request.cf?.latitude;
+		const cfLongitude = request.cf?.longitude;
+		const cfCity = request.cf?.city?.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+		if (cfCountry && cfRegion) {
+			newRequest.headers.set('X-Forwarded-CountryRegion', `${cfCountry}-${cfRegion}`);
+		}
+		if (cfLatitude && cfLongitude && cfCity) {
+			newRequest.headers.set('X-Forwarded-Geolocation', `latlong=${cfLatitude},${cfLongitude};city=${cfCity}`);
+		}
+
+		const response = await fetch(newRequest);
+
+		const newResponse = new Response(response.body, response);
+		newResponse.headers.append('Server-Timing', `kvTime;dur=${kvTime}`);
+
+		return newResponse;
 	},
 } satisfies ExportedHandler<Env>;

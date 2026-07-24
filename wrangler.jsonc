@@ -10,6 +10,8 @@
 	"observability": {
 		"enabled": true
 	},
+	"workers_dev": false,
+	"route": "lcrespilho.com/test1",
 	"upload_source_maps": true,
 	"compatibility_flags": [
 		"nodejs_compat"
