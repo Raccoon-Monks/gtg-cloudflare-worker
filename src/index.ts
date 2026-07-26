@@ -17,10 +17,10 @@ export default {
 
 		// https://excalidraw.com/#json=UZP_BHJ9OPhhVBDMQXxne,nIvP4zsJG7QvDIH94P1xMg
 		if (pathname.startsWith('/gtg/')) {
-			const gtgProxy = getBackend(request) // Ex: https://gtm-wrknvs.fps.goog, https://gtmss-prod-804453080160.us-central1.run.app
+			const gtgProxyHost = getBackendHost(request) // Ex: gtm-wrknvs.fps.goog, gtmss-prod-804453080160.us-central1.run.app
 
 			// Adiciona geolocalização na requisição para o GTG
-			const newRequest: Request = getNewRequestWithGeoHeaders(gtgProxy, request)
+			const newRequest: Request = getNewRequestWithGeoHeaders(gtgProxyHost, request)
 
 			// Para realizar cache dos scripts (GTM e GTAG) é necessário forçar (via objeto `cf`), porque o GTG responde os
 			// scripts de containers com "Cache-Control: private,max-age=900". E não devemos realizar cache para o resto.
@@ -28,8 +28,7 @@ export default {
 			// entrega o header "Cache-Control" para as rotas de saúde. O objeto `cf` nos permite modificar o comportamento
 			// do cache da Cloudflare de forma programática.
 			const cf: CfProperties = isContainerRequest(request)
-				? { cacheControl: 'no-cache, no-store, must-revalidate' } // forçar cache para scripts
-				// ? { cacheControl: 'public,max-age=900' } // forçar cache para scripts
+				? { cacheControl: 'public,max-age=900' } // forçar cache para scripts
 				: { cacheControl: 'no-cache, no-store, must-revalidate' } // proibir cache para o resto
 			const t0 = performance.now()
 			const response = await fetch(newRequest, { cf })
@@ -75,11 +74,13 @@ function isContainerRequest(request: Request): boolean {
 /**
  * Retorna um novo objeto Request contendo headers de geolocalização para GTG e sGTM.
  * É necessário criar um novo objeto Request, pois o original é imutável.
- * @param {string} backendUrl - nova url da requisição
+ * @param {string} backendHost - nova url da requisição
  * @param {Request<unknown, IncomingRequestCfProperties<unknown>>} request - objeto request original
  */
-function getNewRequestWithGeoHeaders(backendUrl: string, request: Request<unknown, IncomingRequestCfProperties<unknown>>) {
-	const newRequest = new Request(backendUrl, request)
+function getNewRequestWithGeoHeaders(backendHost: string, request: Request<unknown, IncomingRequestCfProperties<unknown>>) {
+	const reqUrl = new URL(request.url)
+	reqUrl.hostname = backendHost
+	const newRequest = new Request(reqUrl, request)
 	const cfCountry = newRequest.cf?.country
 	const cfRegion = newRequest.cf?.regionCode
 	const cfLatitude = newRequest.cf?.latitude
@@ -97,11 +98,11 @@ function getNewRequestWithGeoHeaders(backendUrl: string, request: Request<unknow
 }
 
 /**
- * Busca os endpoints do Origin com base no host e path da requisição.
- * @param {Request} request
+ * Retorna o hostname (sem o https://) do Backend/Origin com base no host e path da requisição.
+ * @param {Request} request - requisição original
  * @returns {string}
  */
-function getBackend(request: Request): string {
+function getBackendHost(request: Request): string {
 	const url = new URL(request.url)
 	const host = url.hostname
 	const path: string | undefined = url.pathname.match(/\/\w+\//)?.[0]
@@ -112,8 +113,8 @@ function getBackend(request: Request): string {
 	// O backend deve começar com "https://" obrigatoriamente
 	const map: Record<string, Record<string, string>> = {
 		'lcrespilho.com': {
-			'/gtg/': 'https://gtm-wrknvs.fps.goog',
-			'/sgtm/': 'https://gtmss-prod-804453080160.us-central1.run.app',
+			'/gtg/': 'gtm-wrknvs.fps.goog',
+			'/sgtm/': 'gtmss-prod-804453080160.us-central1.run.app',
 		},
 	}
 	return map[host][path]
