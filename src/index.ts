@@ -11,7 +11,7 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-// https://excalidraw.com/#json=G3Gb2bQtQYDbzT3KssEGC,1V0p4h8myX5Dt7wEN2wqYA
+// Diagrama do fluxo: https://excalidraw.com/#json=G3Gb2bQtQYDbzT3KssEGC,1V0p4h8myX5Dt7wEN2wqYA
 
 const GTG_PATH = '/gtg/'
 const SGTM_PATH = '/sgtm/'
