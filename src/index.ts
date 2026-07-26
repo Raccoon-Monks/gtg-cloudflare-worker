@@ -11,42 +11,57 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
+// https://excalidraw.com/#json=G3Gb2bQtQYDbzT3KssEGC,1V0p4h8myX5Dt7wEN2wqYA
+
+const GTG_PATH = '/gtg/'
+const SGTM_PATH = '/sgtm/'
+const BACKEND_PATH_MAP: Record<string, Record<string, string>> = {
+	'lcrespilho.com': {
+		[GTG_PATH]: 'gtm-wrknvs.fps.goog',
+		[SGTM_PATH]: 'gtmss-prod-804453080160.us-central1.run.app',
+	},
+}
+
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
-		const pathname = new URL(request.url).pathname
+		const reqUrl = new URL(request.url)
+		const pathname = reqUrl.pathname
+		const hostname = reqUrl.hostname
 
-		// https://excalidraw.com/#json=UZP_BHJ9OPhhVBDMQXxne,nIvP4zsJG7QvDIH94P1xMg
-		if (pathname.startsWith('/gtg/')) {
-			const gtgProxyHost = getBackendHost(request) // Ex: gtm-wrknvs.fps.goog, gtmss-prod-804453080160.us-central1.run.app
+		if (pathname.startsWith(GTG_PATH)) {
+			const gtgProxyHost = BACKEND_PATH_MAP[hostname][GTG_PATH] // Ex: "gtm-wrknvs.fps.goog"
 
 			// Adiciona geolocalização na requisição para o GTG
 			const newRequest: Request = getNewRequestWithGeoHeaders(gtgProxyHost, request)
 
-			// Para realizar cache dos scripts (GTM e GTAG) é necessário forçar (via objeto `cf`), porque o GTG responde os
-			// scripts de containers com "Cache-Control: private,max-age=900". E não devemos realizar cache para o resto.
-			// O GTG responde o "Cache-Control: no-cache, no-store, must-revalidate" corretamente para eventos, porém não
-			// entrega o header "Cache-Control" para as rotas de saúde. O objeto `cf` nos permite modificar o comportamento
-			// do cache da Cloudflare de forma programática.
-			const cf: CfProperties = isContainerRequest(request)
-				? { cacheControl: 'public,max-age=900' } // forçar cache para scripts
-				: { cacheControl: 'no-cache, no-store, must-revalidate' } // proibir cache para o resto
 			const t0 = performance.now()
-			const response = await fetch(newRequest, { cf })
+			const response = await fetch(newRequest, { cf: getCachePolicy(request) })
 			const gtgFetchTime = Math.round(performance.now() - t0)
 
 			// Cópia do response para poder mutar os headers
 			const newResponse = new Response(response.body, response)
-
 			// Injeta o Server-Timing na resposta para debugar o tempo do GTG
 			newResponse.headers.append('Server-Timing', `gtgFetchTime;dur=${gtgFetchTime}`)
+
 			return newResponse
-		} else if (pathname.startsWith('/sgtm/')) {
-			return new Response('Path /sgtm/ em manutenção', {
-				status: 503,
-				statusText: 'Service Unavailable',
-			})
+		} else if (pathname.startsWith(SGTM_PATH)) {
+			const sgtmProxyHost = BACKEND_PATH_MAP[hostname][SGTM_PATH] // Ex: "gtmss-prod-804453080160.us-central1.run.app"
+
+			// Adiciona geolocalização na requisição para o sGTM
+			const newRequest: Request = getNewRequestWithGeoHeaders(sgtmProxyHost, request)
+
+			const t0 = performance.now()
+			const response = await fetch(newRequest)
+			const sgtmFetchTime = Math.round(performance.now() - t0)
+
+			// Cópia do response para poder mutar os headers
+			const newResponse = new Response(response.body, response)
+			// Injeta o Server-Timing na resposta para debugar o tempo do sGTM
+			newResponse.headers.append('Server-Timing', `sgtmFetchTime;dur=${sgtmFetchTime}`)
+
+			return newResponse
 		} else {
-			return new Response('Erro: o path deve começar com /gtg/', {
+			return new Response(`Erro: o path deve começar com ${GTG_PATH} ou ${SGTM_PATH}`, {
 				status: 400,
 				statusText: 'Bad Request',
 			})
@@ -55,20 +70,41 @@ export default {
 } satisfies ExportedHandler<Env>
 
 /**
- * Verifica se a requisição é para um container GTM ou GTAG.
- * @param {Request} request - objeto request original
- * @returns {boolean} - true se for requisição para um container GTM ou GTAG
+ * Infelizmente, o header "Cache-Control" não é amigável com CDN e vem trocado em algumas situações:
+ *   - scripts GTM e GTAG: vem "private,max-age=900"; deveria ser "public,max-age=900"
+ *   - rotas de saúde ?validate_geo=healthy e healthy: vem "public"; deveria ser "no-cache, no-store, must-revalidate"
+ *   - o resto (SW GTG, SW + IFRAME SGTM, eventos e telemetria GTG e SGTM) vem correto
+ * O parâmetro `cf` corrige o comportamento para o cache da Cloudflare.
+ * @param {Request} request - requisição original
  */
-function isContainerRequest(request: Request): boolean {
+function getCachePolicy(request: Request): CfProperties {
 	const reqUrl = new URL(request.url)
 	const pathname = reqUrl.pathname
 	const query = reqUrl.search
 	const reqUri = pathname + query + reqUrl.hash
-	// health check do GTG
-	const isHealthyRequest = reqUri.match(/^\/gtg\/(\?validate_geo=)?healthy$/)
-	// scripts de containers do GTG não possuem query parameters
-	const isContainerRequest = !isHealthyRequest && !query
-	return isContainerRequest
+
+	const cfCache = { cacheControl: 'public,max-age=900' }
+	const cfNoCache = { cacheControl: 'no-cache, no-store, must-revalidate' }
+
+	const hasQuery = !!query
+
+	// Possibilidades de requests para o GTG
+	const isGtg = pathname.startsWith(GTG_PATH)
+	const isGtgHealthy = reqUri.match(new RegExp(`^${GTG_PATH}(\\?validate_geo=healthy)?healthy$`))
+	const isGtgContainer = isGtg && !isGtgHealthy && !hasQuery
+	const isGtgSw = pathname.match(new RegExp(`^${GTG_PATH}_service_worker/`))
+	const isGtgEventOrTelemetry = isGtg && hasQuery && !isGtgHealthy && !isGtgSw
+
+	// Para a rota do SGTM não é necessário modificar o comportamento, pois ele envia o header "Cache-Control"
+	// corretamente para todas as suas respostas: eventos, iframe do SW, SW e telemetria.
+
+	if (isGtgContainer || isGtgSw) {
+		return cfCache
+	} else if (isGtgHealthy || isGtgEventOrTelemetry) {
+		return cfNoCache
+	} else {
+		return {} // não deve cair aqui em nenhuma situação
+	}
 }
 
 /**
@@ -95,27 +131,4 @@ function getNewRequestWithGeoHeaders(backendHost: string, request: Request<unkno
 		newRequest.headers.set('X-Forwarded-Geolocation', `latlong=${cfLatitude},${cfLongitude};city=${cfCity}`)
 	}
 	return newRequest
-}
-
-/**
- * Retorna o hostname (sem o https://) do Backend/Origin com base no host e path da requisição.
- * @param {Request} request - requisição original
- * @returns {string}
- */
-function getBackendHost(request: Request): string {
-	const url = new URL(request.url)
-	const host = url.hostname
-	const path: string | undefined = url.pathname.match(/\/\w+\//)?.[0]
-	if (!path) {
-		throw new Error('Invalid path')
-	}
-
-	// O backend deve começar com "https://" obrigatoriamente
-	const map: Record<string, Record<string, string>> = {
-		'lcrespilho.com': {
-			'/gtg/': 'gtm-wrknvs.fps.goog',
-			'/sgtm/': 'gtmss-prod-804453080160.us-central1.run.app',
-		},
-	}
-	return map[host][path]
 }
