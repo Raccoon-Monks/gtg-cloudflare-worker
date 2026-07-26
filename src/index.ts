@@ -83,7 +83,8 @@ function getCachePolicy(request: Request): CfProperties {
 	const query = reqUrl.search
 	const reqUri = pathname + query + reqUrl.hash
 
-	const cfCache = { cacheControl: 'public,max-age=900' }
+	const cfCacheContainer = { cacheControl: 'public,max-age=900' } // 15min = default para o browser
+	const cfCacheSw = { cacheControl: 'public,max-age=31536000' } // 1 ano = default para o browser
 	const cfNoCache = { cacheControl: 'no-cache, no-store, must-revalidate' }
 
 	const hasQuery = !!query
@@ -92,19 +93,13 @@ function getCachePolicy(request: Request): CfProperties {
 	const isGtg = pathname.startsWith(GTG_PATH)
 	const isGtgHealthy = reqUri.match(new RegExp(`^${GTG_PATH}(\\?validate_geo=healthy)?healthy$`))
 	const isGtgContainer = isGtg && !isGtgHealthy && !hasQuery
-	const isGtgSw = pathname.match(new RegExp(`^${GTG_PATH}_service_worker/`))
-	const isGtgEventOrTelemetry = isGtg && hasQuery && !isGtgHealthy && !isGtgSw
+	const isGtgSw = pathname.match(new RegExp(`^${GTG_PATH}_/service_worker/`))
+	// const isGtgEventOrTelemetry = isGtg && hasQuery && !isGtgHealthy && !isGtgSw // desnecessário alterar o comportamento, pois já vem correto
 
 	// Para a rota do SGTM não é necessário modificar o comportamento, pois ele envia o header "Cache-Control"
 	// corretamente para todas as suas respostas: eventos, iframe do SW, SW e telemetria.
 
-	if (isGtgContainer || isGtgSw) {
-		return cfCache
-	} else if (isGtgHealthy || isGtgEventOrTelemetry) {
-		return cfNoCache
-	} else {
-		return {} // não deve cair aqui em nenhuma situação
-	}
+	return isGtgContainer ? cfCacheContainer : isGtgSw ? cfCacheSw : cfNoCache
 }
 
 /**
