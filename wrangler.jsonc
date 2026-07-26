@@ -18,19 +18,18 @@
 		},
 	},
 	"workers_dev": false,
-	"route": "lcrespilho.com/gtg/*",
-	// "routes": [
-	// 	{
-	// 		"pattern": "lcrespilho.com/gtg/*",
-	// 		"zone_name": "lcrespilho.com",
-	// 		"custom_domain": false,
-	// 	},
-	// 	{
-	// 		"pattern": "lcrespilho.com/sgtm/*",
-	// 		"zone_name": "lcrespilho.com",
-	// 		"custom_domain": false,
-	// 	},
-	// ],
+	"routes": [
+		{
+			"pattern": "lcrespilho.com/gtg/*",
+			"zone_name": "lcrespilho.com",
+			"custom_domain": false,
+		},
+		{
+			"pattern": "lcrespilho.com/sgtm/*",
+			"zone_name": "lcrespilho.com",
+			"custom_domain": false,
+		},
+	],
 	"upload_source_maps": true,
 	"compatibility_flags": ["nodejs_compat"],
 	// "kv_namespaces": [
