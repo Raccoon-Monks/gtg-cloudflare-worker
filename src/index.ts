@@ -77,15 +77,15 @@ export default {
  * O parâmetro `cf` corrige o comportamento para o cache da Cloudflare.
  * @param {Request} request - requisição original
  */
-function getCachePolicy(request: Request): CfProperties {
+function getCachePolicy(request: Request): RequestInitCfProperties {
 	const reqUrl = new URL(request.url)
 	const pathname = reqUrl.pathname
 	const query = reqUrl.search
 	const reqUri = pathname + query + reqUrl.hash
 
-	const cfCacheContainer = { cacheControl: 'public,max-age=900' } // 15min = default para o browser
-	const cfCacheSw = { cacheControl: 'public,max-age=31536000' } // 1 ano = default para o browser
-	const cfNoCache = { cacheControl: 'no-cache, no-store, must-revalidate' }
+	const cfCacheContainer: RequestInitCfProperties = { cacheControl: 'public,max-age=900', cacheEverything: true } // 15min = default para o browser
+	const cfCacheSw: RequestInitCfProperties = { cacheControl: 'public,max-age=31536000', cacheEverything: true } // 1 ano = default para o browser
+	const cfNoCache: RequestInitCfProperties = { cacheControl: 'no-cache, no-store, must-revalidate', cacheEverything: true }
 
 	const hasQuery = !!query
 
