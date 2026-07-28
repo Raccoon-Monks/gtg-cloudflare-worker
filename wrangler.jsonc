@@ -20,14 +20,12 @@
 	"workers_dev": false,
 	"routes": [
 		{
-			"pattern": "lcrespilho.com/gtg/*",
-			"zone_name": "lcrespilho.com",
-			"custom_domain": false,
+			"pattern": "cloudflare-worker.lcrespilh.us/gtg/*",
+			"zone_name": "lcrespilh.us",
 		},
 		{
-			"pattern": "lcrespilho.com/sgtm/*",
-			"zone_name": "lcrespilho.com",
-			"custom_domain": false,
+			"pattern": "cloudflare-worker.lcrespilh.us/sgtm/*",
+			"zone_name": "lcrespilh.us",
 		},
 	],
 	"upload_source_maps": true,

@@ -16,7 +16,7 @@
 const GTG_PATH = '/gtg/'
 const SGTM_PATH = '/sgtm/'
 const BACKEND_PATH_MAP: Record<string, Record<string, string>> = {
-	'lcrespilho.com': {
+	'cloudflare-worker.lcrespilh.us': {
 		[GTG_PATH]: 'gtm-wrknvs.fps.goog',
 		[SGTM_PATH]: 'gtmss-prod-804453080160.us-central1.run.app',
 	},
@@ -111,6 +111,7 @@ function getCachePolicy(request: Request): CfProperties {
 function getNewRequestWithGeoHeaders(backendHost: string, request: Request<unknown, IncomingRequestCfProperties<unknown>>) {
 	const reqUrl = new URL(request.url)
 	reqUrl.hostname = backendHost
+	reqUrl.protocol = 'https:'
 	const newRequest = new Request(reqUrl, request)
 	const cfCountry = newRequest.cf?.country
 	const cfRegion = newRequest.cf?.regionCode
