@@ -119,12 +119,12 @@ function getNewRequestWithGeoHeaders(backendHost: string, request: Request<unkno
 	const cfLongitude = newRequest.cf?.longitude
 	const cfCity = newRequest.cf?.city?.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 	if (cfCountry && cfRegion) {
-		newRequest.headers.set('X-Forwarded-CountryRegion', `${cfCountry}-${cfRegion}`)
-		newRequest.headers.set('X-Gclb-Country', cfCountry)
-		newRequest.headers.set('X-Gclb-Region', cfRegion)
+		newRequest.headers.set('X-Forwarded-CountryRegion', `${cfCountry}-${cfRegion}`) // Ex: "BR-SP"
+		newRequest.headers.set('X-Gclb-Country', cfCountry) // Ex: "BR"
+		newRequest.headers.set('X-Gclb-Region', `${cfCountry}${cfRegion}`) // Ex: "BRSP"
 	}
 	if (cfLatitude && cfLongitude && cfCity) {
-		newRequest.headers.set('X-Forwarded-Geolocation', `latlong=${cfLatitude},${cfLongitude};city=${cfCity}`)
+		newRequest.headers.set('X-Forwarded-Geolocation', `latlong=${cfLatitude},${cfLongitude};city=${cfCity}`) // Ex: "latlong=22.8047,-45.0825;city=Sao Paulo"
 	}
 	return newRequest
 }
