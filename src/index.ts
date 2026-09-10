@@ -94,18 +94,12 @@ function getCachePolicy(request: Request): RequestInitCfProperties {
 	const isGtgHealthy = reqUri.match(new RegExp(`^${GTG_PATH}(\\?validate_geo=healthy)?healthy$`))
 	const isGtgContainer = isGtg && !isGtgHealthy && !hasQuery
 	const isGtgSw = pathname.match(new RegExp(`^${GTG_PATH}_/service_worker/`))
-	// const isGtgEventOrTelemetry = isGtg && hasQuery && !isGtgHealthy && !isGtgSw // desnecessário alterar o comportamento, pois já vem correto
-
-	// Para a rota do SGTM não é necessário modificar o comportamento, pois ele envia o header "Cache-Control"
-	// corretamente para todas as suas respostas: eventos, iframe do SW, SW e telemetria.
-
-	return isGtgContainer ? cfCacheContainer : isGtgSw ? cfCacheSw : cfNoCache
+	return isGtgContainer ? cfCacheContainer : isGtgSw ? cfCacheSw : cfNoCache /*cobre rotas de saúde, preview, telemetria e eventos*/
 }
 
 /**
- * Retorna um novo objeto Request contendo headers de geolocalização para GTG e sGTM.
- * É necessário criar um novo objeto Request, pois o original é imutável.
- * @param {string} backendHost - nova url da requisição
+ * Dado o request original (imutável) e o Hostname do backend, retorna um novo objeto Request contendo headers de geolocalização para GTG e sGTM.
+ * @param {string} backendHost - Hostname do backend
  * @param {Request<unknown, IncomingRequestCfProperties<unknown>>} request - objeto request original
  */
 function getNewRequestWithGeoHeaders(backendHost: string, request: Request<unknown, IncomingRequestCfProperties<unknown>>) {

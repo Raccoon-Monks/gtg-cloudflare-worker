@@ -11,8 +11,14 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.12.4",
     "@types/node": "^26.1.1",
-    "typescript": "^5.5.2",
+    "typescript": "^7.0.2",
     "vitest": "~3.2.0",
-    "wrangler": "^4.114.0"
+    "wrangler": "^4.131.0"
+  },
+  "allowScripts": {
+    "sharp": true,
+    "workerd": true,
+    "esbuild": true,
+    "fsevents": true
   }
 }
