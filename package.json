@@ -1,21 +1,22 @@
 {
-  "name": "gtg-cloudflare-worker",
-  "version": "0.0.0",
-  "private": true,
-  "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "X_LOCAL_OBSERVABILITY=true wrangler dev",
-    "cf-typegen": "wrangler types"
-  },
-  "devDependencies": {
-    "@types/node": "^26.1.1",
-    "typescript": "^7.0.2",
-    "wrangler": "^4.131.0"
-  },
-  "allowScripts": {
-    "sharp": true,
-    "workerd": true,
-    "esbuild": true,
-    "fsevents": true
-  }
+	"name": "gtg-cloudflare-worker",
+	"version": "0.0.0",
+	"private": true,
+	"scripts": {
+		"deploy": "wrangler deploy",
+		"dev": "X_LOCAL_OBSERVABILITY=true wrangler dev",
+		"cf-typegen": "wrangler types",
+		"observability-tail-json": "wrangler tail --format json"
+	},
+	"devDependencies": {
+		"@types/node": "^26.1.1",
+		"typescript": "^7.0.2",
+		"wrangler": "^4.131.0"
+	},
+	"allowScripts": {
+		"sharp": true,
+		"workerd": true,
+		"esbuild": true,
+		"fsevents": true
+	}
 }

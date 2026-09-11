@@ -1,6 +1,4 @@
 /**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
  * - Run `npm run dev` in your terminal to start a development server
  * - Open a browser tab at http://localhost:8787/ to see your worker in action
  * - Run `npm run deploy` to publish your worker
@@ -15,106 +13,78 @@
 
 const GTG_PATH = '/gtg/'
 const SGTM_PATH = '/sgtm/'
-const BACKEND_PATH_MAP: Record<string, Record<string, string>> = {
-	'cloudflare-worker.lcrespilh.us': {
-		[GTG_PATH]: 'gtm-wrknvs.fps.goog',
-		[SGTM_PATH]: 'gtmss-prod-804453080160.us-central1.run.app',
-	},
-}
+const GTG_UPSTREAM = 'gtm-wrknvs.fps.goog'
+const SGTM_UPSTREAM = 'gtmss-prod-804453080160.us-central1.run.app'
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
 		const reqUrl = new URL(request.url)
 		const pathname = reqUrl.pathname
-		const hostname = reqUrl.hostname
 
-		if (pathname.startsWith(GTG_PATH)) {
-			const gtgProxyHost = BACKEND_PATH_MAP[hostname][GTG_PATH] // Ex: "gtm-wrknvs.fps.goog"
-
-			// Adiciona geolocalização na requisição para o GTG
-			const newRequest: Request = getNewRequestWithGeoHeaders(gtgProxyHost, request)
-
-			const t0 = performance.now()
-			const response = await fetch(newRequest, { cf: getCachePolicy(request) })
-			const gtgFetchTime = Math.round(performance.now() - t0)
-
-			// Cópia do response para poder mutar os headers
-			const newResponse = new Response(response.body, response)
-			// Injeta o Server-Timing na resposta para debugar o tempo do GTG
-			newResponse.headers.append('Server-Timing', `gtgFetchTime;dur=${gtgFetchTime}`)
-
-			return newResponse
-		} else if (pathname.startsWith(SGTM_PATH)) {
-			const sgtmProxyHost = BACKEND_PATH_MAP[hostname][SGTM_PATH] // Ex: "gtmss-prod-804453080160.us-central1.run.app"
-
-			// Adiciona geolocalização na requisição para o sGTM
-			const newRequest: Request = getNewRequestWithGeoHeaders(sgtmProxyHost, request)
-
-			const t0 = performance.now()
-			const response = await fetch(newRequest)
-			const sgtmFetchTime = Math.round(performance.now() - t0)
-
-			// Cópia do response para poder mutar os headers
-			const newResponse = new Response(response.body, response)
-			// Injeta o Server-Timing na resposta para debugar o tempo do sGTM
-			newResponse.headers.append('Server-Timing', `sgtmFetchTime;dur=${sgtmFetchTime}`)
-
-			return newResponse
-		} else {
+		if (!pathname.startsWith(GTG_PATH) && !pathname.startsWith(SGTM_PATH)) {
 			return new Response(`Erro: o path deve começar com ${GTG_PATH} ou ${SGTM_PATH}`, {
 				status: 400,
 				statusText: 'Bad Request',
 			})
 		}
+
+		const proxyRequest: Request = buildUpstreamRequest(request)
+		const edgeCacheOptions = resolveEdgeCacheOptions(request)
+		const response = await fetch(proxyRequest, { cf: edgeCacheOptions })
+
+		if (edgeCacheOptions.cacheEverything) {
+			// É script/container. O browser receberia "private, max-age=900". Não está errado, pois o browser fará
+			// o cache localmente. Porém, quero indicar que o cache foi feito também na CDN/edge, e por isso altero
+			// para "public, max-age=900".
+			const newResponse = new Response(response.body, response)
+			newResponse.headers.set('Cache-Control', `public, max-age=${edgeCacheOptions.cacheTtl}`)
+			return newResponse
+		} else {
+			return response
+		}
 	},
 } satisfies ExportedHandler<Env>
 
 /**
- * Infelizmente, o header "Cache-Control" não é amigável com CDN e vem trocado em algumas situações:
- *   - scripts GTM e GTAG: vem "private,max-age=900"; deveria ser "public,max-age=900"
- *   - rotas de saúde ?validate_geo=healthy e healthy: vem "public"; deveria ser "no-cache, no-store, must-revalidate"
- *   - o resto (SW GTG, SW + IFRAME SGTM, eventos e telemetria GTG e SGTM) vem correto
- * O parâmetro `cf` corrige o comportamento para o cache da Cloudflare.
- * @param {Request} request - requisição original
+ * Configura as políticas de Edge Cache da Cloudflare para subrequisições:
+ * - Containers/scripts: força cache na CDN (`cacheEverything`) com TTL customizado (`cacheTtl`).
+ * - Demais rotas (saúde, eventos, SW, iframe-SW e telemetria): mantém o comportamento padrão da origem.
+ *
+ * @param {Request} request - Requisição original
  */
-function getCachePolicy(request: Request): RequestInitCfProperties {
+function resolveEdgeCacheOptions(request: Request): RequestInitCfProperties {
 	const reqUrl = new URL(request.url)
-	const pathname = reqUrl.pathname
-	const query = reqUrl.search
-	const reqUri = pathname + query + reqUrl.hash
-
-	const cfCacheContainer: RequestInitCfProperties = { cacheControl: 'public,max-age=900', cacheEverything: true } // 15min = default para o browser
-	const cfCacheSw: RequestInitCfProperties = { cacheControl: 'public,max-age=31536000', cacheEverything: true } // 1 ano = default para o browser
-	const cfNoCache: RequestInitCfProperties = { cacheControl: 'no-cache, no-store, must-revalidate', cacheEverything: true }
-
-	const hasQuery = !!query
-
-	// Possibilidades de requests para o GTG
-	const isGtg = pathname.startsWith(GTG_PATH)
-	const isGtgHealthy = reqUri.match(new RegExp(`^${GTG_PATH}(\\?validate_geo=healthy)?healthy$`))
-	const isGtgContainer = isGtg && !isGtgHealthy && !hasQuery
-	const isGtgSw = pathname.match(new RegExp(`^${GTG_PATH}_/service_worker/`))
-	return isGtgContainer ? cfCacheContainer : isGtgSw ? cfCacheSw : cfNoCache /*cobre rotas de saúde, preview, telemetria e eventos*/
+	const reqUri = reqUrl.pathname + reqUrl.search + reqUrl.hash
+	const reContainers = /\/(gtg|sgtm)\/(?!healthy)[a-zA-Z0-9-_]*$/ // só dá match com scripts/containers em produção
+	const cfCacheContainer: RequestInitCfProperties = { cacheTtl: 900, cacheEverything: true } // 900s = 15min = default para o browser
+	return reContainers.test(reqUri) ? cfCacheContainer : {}
 }
 
 /**
- * Dado o request original (imutável) e o Hostname do backend, retorna um novo objeto Request contendo headers de geolocalização para GTG e sGTM.
- * @param {string} backendHost - Hostname do backend
- * @param {Request<unknown, IncomingRequestCfProperties<unknown>>} request - objeto request original
+ * Constrói a requisição upstream reescrevendo o hostname de destino e enriquecendo-a
+ * com os cabeçalhos de geolocalização (`X-Forwarded-*` / `X-Gclb-*`) providos pela Cloudflare.
+ *
+ * @param {Request<unknown, IncomingRequestCfProperties<unknown>>} request - Requisição original
  */
-function getNewRequestWithGeoHeaders(backendHost: string, request: Request<unknown, IncomingRequestCfProperties<unknown>>) {
-	const reqUrl = new URL(request.url)
-	reqUrl.hostname = backendHost
-	reqUrl.protocol = 'https:'
-	const newRequest = new Request(reqUrl, request)
+function buildUpstreamRequest(request: Request<unknown, IncomingRequestCfProperties<unknown>>) {
+	const requestUrl = new URL(request.url)
+	const requestPathname = requestUrl.pathname
+	// Reescreve o upstream de destino
+	requestUrl.hostname = requestPathname.startsWith(GTG_PATH) ? GTG_UPSTREAM : SGTM_UPSTREAM
+	requestUrl.protocol = 'https:'
+	const newRequest = new Request(requestUrl, request)
 	const cfCountry = newRequest.cf?.country
 	const cfRegion = newRequest.cf?.regionCode
 	const cfLatitude = newRequest.cf?.latitude
 	const cfLongitude = newRequest.cf?.longitude
 	const cfCity = newRequest.cf?.city?.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-	if (cfCountry && cfRegion) {
-		newRequest.headers.set('X-Forwarded-CountryRegion', `${cfCountry}-${cfRegion}`) // Ex: "BR-SP"
+	// Enriquece com cabeçalhos de geolocalização
+	if (cfCountry) {
+		newRequest.headers.set('X-Forwarded-Country', cfCountry) // Ex: "BR"
 		newRequest.headers.set('X-Gclb-Country', cfCountry) // Ex: "BR"
+	}
+	if (cfRegion) {
+		newRequest.headers.set('X-Forwarded-Region', cfRegion) // Ex: "SP"
 		newRequest.headers.set('X-Gclb-Region', `${cfCountry}${cfRegion}`) // Ex: "BRSP"
 	}
 	if (cfLatitude && cfLongitude && cfCity) {
