@@ -5,14 +5,11 @@
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "X_LOCAL_OBSERVABILITY=true wrangler dev",
-    "test": "vitest",
     "cf-typegen": "wrangler types"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.12.4",
     "@types/node": "^26.1.1",
     "typescript": "^7.0.2",
-    "vitest": "~3.2.0",
     "wrangler": "^4.131.0"
   },
   "allowScripts": {

@@ -6,7 +6,7 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "gtg-cloudflare-worker",
 	"main": "src/index.ts",
-	"compatibility_date": "2026-07-23",
+	"compatibility_date": "2026-03-10",
 	"observability": {
 		"enabled": false,
 		"logs": {
