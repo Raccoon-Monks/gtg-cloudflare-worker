@@ -28,9 +28,9 @@ export default {
 			})
 		}
 
-		const proxyRequest: Request = buildUpstreamRequest(request)
+		const upstreamRequest: Request = buildUpstreamRequest(request)
 		const edgeCacheOptions = resolveEdgeCacheOptions(request)
-		const response = await fetch(proxyRequest, { cf: edgeCacheOptions })
+		const response = await fetch(upstreamRequest, { cf: edgeCacheOptions })
 
 		if (edgeCacheOptions.cacheEverything) {
 			// É script/container. O browser receberia "private, max-age=900". Não está errado, pois o browser fará
