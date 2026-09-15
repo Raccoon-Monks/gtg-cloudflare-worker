@@ -72,6 +72,7 @@ function buildUpstreamRequest(request: Request<unknown, IncomingRequestCfPropert
 	// Reescreve o upstream de destino
 	requestUrl.hostname = requestPathname.startsWith(GTG_PATH) ? GTG_UPSTREAM : SGTM_UPSTREAM
 	requestUrl.protocol = 'https:'
+	requestUrl.port = ''
 	const newRequest = new Request(requestUrl, request)
 	const cfCountry = newRequest.cf?.country
 	const cfRegion = newRequest.cf?.regionCode
